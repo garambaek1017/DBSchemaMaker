@@ -1,3 +1,0 @@
-tbl_account
-tbl_item
-tbl_hero

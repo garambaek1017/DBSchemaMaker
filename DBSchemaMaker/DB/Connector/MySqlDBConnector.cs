@@ -1,37 +1,38 @@
 ﻿using MySql.Data.MySqlClient;
 using System.Data;
 
-namespace DB_Schema_Maker
+namespace DBSchemaMaker
 {
     public class MySqlDBConnector
     {
         private bool _rollbackFlag;
-        private IDbTransaction _Transaction = null;
+        private IDbTransaction _transaction = null;
         public IDbConnection Connection { get; set; }
 
         public MySqlDBConnector(string connectionString, bool useTransaction = false)
         {
-            Connection = new MySqlConnection();
-            // connection string 사용 
-            Connection.ConnectionString = connectionString;
-            // connection open 
+            Connection = new MySqlConnection
+            {
+                ConnectionString = connectionString
+            };
+
             Connection.Open();
 
             if (useTransaction == true)
             {
-                _Transaction = Connection.BeginTransaction();
+                _transaction = Connection.BeginTransaction();
                 _rollbackFlag = true;
             }
         }
 
         public virtual void Dispose()
         {
-            if (_Transaction != null)
+            if (_transaction != null)
             {
                 if (_rollbackFlag == true)
-                    _Transaction.Rollback();
+                    _transaction.Rollback();
                 else
-                    _Transaction.Commit();
+                    _transaction.Commit();
             }
 
             Connection.Close();

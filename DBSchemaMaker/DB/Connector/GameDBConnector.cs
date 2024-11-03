@@ -1,12 +1,13 @@
 ﻿using System;
 
-namespace DB_Schema_Maker.DB.Connector
+namespace DBSchemaMaker.DB.Connector
 {
-    public sealed class TestDBConnector : MySqlDBConnector, IDisposable
+    public sealed class GameDBConnector : MySqlDBConnector, IDisposable
     {
+        public static string Name { get; set; }
         public static string ConnectionString { get; set; }
 
-        public TestDBConnector(bool useTransaction = false)
+        public GameDBConnector(bool useTransaction = false)
             : base(ConnectionString, useTransaction)
         {
 

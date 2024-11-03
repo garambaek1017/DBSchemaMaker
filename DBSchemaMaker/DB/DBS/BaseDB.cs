@@ -1,70 +1,43 @@
 ﻿using Dapper;
-using DB_Schema_Maker.DB.Model;
+using DBSchemaMaker.DB.Model;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using Excel = Microsoft.Office.Interop.Excel;
 
-namespace DB_Schema_Maker.DB
+namespace DBSchemaMaker.DB
 {
     public abstract class BaseDB
     {
         #region 생성자 
         public BaseDB()
         {
-
         }
-        public BaseDB(string _name)
+        public BaseDB(string name)
         {
-            DBName = _name;
-            SaveExcelPath = Environment.CurrentDirectory + $"/{DBName}.xls";
+            _dbName = name;
+            _saveExcelPath = Environment.CurrentDirectory + $"/{_dbName}.xlsx";
         }
         #endregion
 
-        // 엑셀 저장 패스 
-        private string SaveExcelPath { get; set; }
-        // 디비 이름 
-        public string DBName { get; set; }
-
-        /// <summary>
-        /// 모든 테이블 정보 
-        /// </summary>
-        public List<string> AllTableList = new List<string>();
-
-        /// <summary>
-        /// 모든 엑셀 정보 
-        /// </summary>
-        public Dictionary<string, List<TableInfo>> AllTableInfos = new Dictionary<string, List<TableInfo>>();
-
-        /// <summary>
-        /// DB 별로 데이터 가져옴 
-        /// </summary>
+        private string _saveExcelPath { get; set; }
+        private List<string> _allTableList = new List<string>();
+        private Dictionary<string, List<TableInfo>> _allTableInfos = new Dictionary<string, List<TableInfo>>();
+        private string _dbName { get; set; }
         public abstract void GetTableInfoFromDB();
+        public abstract void TestConnection();
 
-        /// <summary>
-        /// 테이블 리스트 가져옴 
-        /// </summary>
-        public void GetTableList(string tableListFileName)
+        public void DoTestQuery(IDbConnection conn)
         {
-            var currentPath = Environment.CurrentDirectory;
-            var filePath = currentPath + $"/list/{tableListFileName}.txt";
-            var temp = System.IO.File.ReadAllLines(filePath);
-
-            foreach (var t in temp)
-            {
-                AllTableList.Add(t);
-            }
-
-            Console.WriteLine($"{DBName} table count is {AllTableList.Count}");
+            conn.Query("SELECT 1");
+            LogHelper.Debug($"{_dbName}:: DoTestQuery is Success");
         }
 
-        /// <summary>
-        /// Excel file 생성 
-        /// </summary>
         public void WriteExcel()
         {
-            Console.WriteLine($"Start Write Excel");
+            LogHelper.Debug($"{_dbName}:: Start Write Excel");
 
             Excel.Application excelApp = null;
             Excel.Workbook wb = null;
@@ -72,7 +45,7 @@ namespace DB_Schema_Maker.DB
             excelApp = new Excel.Application();
             wb = excelApp.Workbooks.Add();
 
-            var allTableInfosKeys = AllTableInfos.Keys.ToList();
+            var allTableInfosKeys = _allTableInfos.Keys.ToList();
             foreach (var key in allTableInfosKeys)
             {
                 var newWorksheet = wb.Worksheets.Add(After: wb.Sheets[wb.Sheets.Count]) as Excel.Worksheet;
@@ -105,7 +78,7 @@ namespace DB_Schema_Maker.DB
 
                 // 두번째줄부터 데이터 쓰기 
                 int row = 2;
-                var tableInfo = AllTableInfos[key];
+                var tableInfo = _allTableInfos[key];
                 foreach (var tb in tableInfo)
                 {
                     newWorksheet.Cells[row, 1] = tb.OridinalPosition;
@@ -122,37 +95,46 @@ namespace DB_Schema_Maker.DB
                 newWorksheet.get_Range($"A{row - 1}:G{row - 1}").Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThin;
             }
 
-            //// 엑셀파일 저장
-            wb.SaveAs(SaveExcelPath, Excel.XlFileFormat.xlWorkbookNormal);
+            if (File.Exists(_saveExcelPath))
+            {
+                // 파일이 존재하면 삭제
+                File.Delete(_saveExcelPath);
+            }
 
+            // 엑셀파일 저장
+            wb.SaveAs(_saveExcelPath, Excel.XlFileFormat.xlWorkbookNormal, AccessMode: Excel.XlSaveAsAccessMode.xlNoChange);
             wb.Close(true);
+
             excelApp.Quit();
 
-            Console.WriteLine("Making Excel is done");
+            LogHelper.Debug($"{_dbName}:: Making Excel is done --> {_saveExcelPath}");
         }
-
-        /// <summary>
-        /// DB로 부터 직접 쿼리하는 부분 
-        /// </summary>
-        /// <param name="conn"></param>
-        protected void GetDataFromDB(IDbConnection conn)
+        protected void GetTableInfoFromDB(IDbConnection conn)
         {
             // key : table 이름 
-            foreach (var key in AllTableList)
+            foreach (var key in _allTableList)
             {
                 var sql = "SELECT ORDINAL_POSITION as `OridinalPosition`, COLUMN_NAME as `ColumnName`, UPPER(DATA_TYPE) as `DataType`, REGEXP_SUBSTR(COLUMN_TYPE,'[0-9]+') as `Length`, COLUMN_COMMENT as `Description` , COLUMN_KEY as `Index`"
                           + " FROM "
                           + " INFORMATION_SCHEMA.COLUMNS "
                           + " WHERE "
-                          + $" TABLE_SCHEMA = '{DBName}'"
+                          + $" TABLE_SCHEMA = '{_dbName}'"
                           + " AND "
                           + $"  TABLE_NAME = '{key}'; ";
 
                 var result = conn.Query<TableInfo>(sql).OrderBy(w => w.OridinalPosition).ToList();
 
-                AllTableInfos.Add(key, result);
+                _allTableInfos.Add(key, result);
             }
+
+            LogHelper.Debug($"{_dbName}:: GetTableInfoFromDB is Success");
         }
-        
+        protected void GetAllTableListFromDB(IDbConnection conn)
+        {
+            var sql = $"SHOW TABLES FROM {_dbName}";
+            _allTableList = conn.Query<string>(sql).ToList();
+
+            LogHelper.Debug($"{_dbName}:: GetAllTableListFromDB is Success");
+        }
     }
 }
